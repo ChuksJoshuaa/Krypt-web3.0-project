@@ -8,7 +8,7 @@ export const TransactionContext = React.createContext();
 const { ethereum } = window;
 
 const getEthereumContract = () => {
-  const provider = new ethers.provider.Web3Provider(ethereum);
+  const provider = new ethers.BrowserProvider(ethereum);
   const signer = provider.getSigner();
   const transactionContract = new ethers.Contract(
     contractAddress,
@@ -16,15 +16,17 @@ const getEthereumContract = () => {
     signer
   );
 
-  console.log({
-    provider,
-    signer,
-    transactionContract,
-  });
+  console.log(transactionContract);
+
+  return transactionContract;
 };
 
 export const TransactionProvider = ({ children }) => {
   const [currentAccount, setCurrentAccount] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [transactionCount, setTransactionCount] = useState(
+    localStorage.getItem("transactionCount")
+  );
   const [formData, setFormData] = useState({
     addressTo: "",
     amount: "",
@@ -39,7 +41,6 @@ export const TransactionProvider = ({ children }) => {
       if (!ethereum) return alert("Please install metamask");
 
       const accounts = await ethereum.request({ method: "eth_accounts" });
-      console.log(accounts);
       if (accounts && accounts.length > 0) {
         setCurrentAccount(accounts[0]);
 
@@ -67,6 +68,37 @@ export const TransactionProvider = ({ children }) => {
   const sendTransaction = async () => {
     try {
       if (!ethereum) return alert("Please install metamask");
+      const transactionContract = getEthereumContract();
+      const { addressTo, amount, keyword, message } = formData;
+      const parsedAmount = ethers.parseEther(amount);
+
+      await ethereum.request({
+        method: "eth_sendTransaction",
+        params: [
+          {
+            from: currentAccount,
+            to: addressTo,
+            gas: "0x5208", //21000 GWEI
+            value: parsedAmount.toString(16),
+          },
+        ],
+      });
+
+      const transactionHash = await transactionContract.addToBlockchain(
+        addressTo,
+        parsedAmount,
+        message,
+        keyword
+      );
+      setIsLoading(true);
+      console.log(`Loading - ${transactionHash.hash}`);
+      await transactionHash.wait();
+      console.log(`Success - ${transactionHash.hash}`);
+      setIsLoading(false);
+
+      const transactionsCount = await transactionContract.getTransactionCount();
+      setTransactionCount(transactionsCount.toNumber());
+      window.location.reload();
     } catch (error) {
       console.log("error", error);
     }
