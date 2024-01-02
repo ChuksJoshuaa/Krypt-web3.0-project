@@ -1,19 +1,23 @@
 import React, { useEffect, useState } from "react";
-import { ethers } from "ethers";
+import { ethers, JsonRpcProvider } from "ethers";
 
 import { contractABI, contractAddress } from "../utils/constants.js";
 
 export const TransactionContext = React.createContext();
 
 const { ethereum } = window;
+const sepoliaRpcUrl = `https://eth-sepolia.g.alchemy.com/v2/${
+  import.meta.env.VITE_SEPOLIA_KEY
+}`;
 
 const getEthereumContract = () => {
-  const provider = new ethers.BrowserProvider(ethereum);
-  const signer = provider.getSigner();
+  // const provider = new ethers.BrowserProvider(ethereum);
+  const provider = new JsonRpcProvider(sepoliaRpcUrl);
+  // const signer = provider.getSigner();
   const transactionContract = new ethers.Contract(
     contractAddress,
     contractABI,
-    signer
+    provider
   );
 
   console.log(transactionContract);
@@ -24,6 +28,7 @@ const getEthereumContract = () => {
 export const TransactionProvider = ({ children }) => {
   const [currentAccount, setCurrentAccount] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [transactions, setTransactions] = useState([]);
   const [transactionCount, setTransactionCount] = useState(
     localStorage.getItem("transactionCount")
   );
@@ -36,6 +41,41 @@ export const TransactionProvider = ({ children }) => {
   const handleChange = (e, name) => {
     setFormData((prevState) => ({ ...prevState, [name]: e.target.value }));
   };
+
+  const getAllTransactions = async () => {
+    try {
+      if (ethereum) {
+        const transactionsContract = getEthereumContract();
+
+        const availableTransactions =
+          await transactionsContract.getAllTransactions();
+
+        console.log(availableTransactions);
+
+        const structuredTransactions = availableTransactions.map(
+          (transaction) => ({
+            addressTo: transaction.receiver,
+            addressFrom: transaction.sender,
+            timestamp: new Date(
+              transaction.timestamp.toNumber() * 1000
+            ).toLocaleString(),
+            message: transaction.message,
+            keyword: transaction.keyword,
+            amount: parseInt(transaction.amount._hex) / 10 ** 18,
+          })
+        );
+
+        console.log(structuredTransactions);
+
+        setTransactions(structuredTransactions);
+      } else {
+        console.log("Ethereum is not present");
+      }
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
   const checkIfWalletConnected = async () => {
     try {
       if (!ethereum) return alert("Please install metamask");
@@ -44,7 +84,7 @@ export const TransactionProvider = ({ children }) => {
       if (accounts && accounts.length > 0) {
         setCurrentAccount(accounts[0]);
 
-        // getAllTransactions()
+        getAllTransactions();
       } else {
         console.log("no accounts found");
       }
@@ -104,8 +144,28 @@ export const TransactionProvider = ({ children }) => {
     }
   };
 
+  const checkIfTransactionsExists = async () => {
+    try {
+      if (ethereum) {
+        const transactionContract = getEthereumContract();
+        const currentTransactionCount =
+          await transactionContract.getTransactionCount();
+
+        window.localStorage.setItem(
+          "transactionCount",
+          currentTransactionCount
+        );
+      }
+    } catch (error) {
+      console.log(error);
+
+      throw new Error("No ethereum object");
+    }
+  };
+
   useEffect(() => {
     checkIfWalletConnected();
+    checkIfTransactionsExists();
   }, []);
   return (
     <TransactionContext.Provider
