@@ -1,26 +1,24 @@
 import React, { useEffect, useState } from "react";
-import { ethers, JsonRpcProvider } from "ethers";
+import { ethers } from "ethers";
 
 import { contractABI, contractAddress } from "../utils/constants.js";
 
 export const TransactionContext = React.createContext();
 
 const { ethereum } = window;
+
 const sepoliaRpcUrl = `https://eth-sepolia.g.alchemy.com/v2/${
   import.meta.env.VITE_SEPOLIA_KEY
 }`;
 
 const getEthereumContract = () => {
-  // const provider = new ethers.BrowserProvider(ethereum);
-  const provider = new JsonRpcProvider(sepoliaRpcUrl);
-  // const signer = provider.getSigner();
+  const provider = new ethers.providers.Web3Provider(ethereum);
+  const signer = provider.getSigner();
   const transactionContract = new ethers.Contract(
     contractAddress,
     contractABI,
-    provider
+    signer
   );
-
-  console.log(transactionContract);
 
   return transactionContract;
 };
@@ -50,8 +48,6 @@ export const TransactionProvider = ({ children }) => {
         const availableTransactions =
           await transactionsContract.getAllTransactions();
 
-        console.log(availableTransactions);
-
         const structuredTransactions = availableTransactions.map(
           (transaction) => ({
             addressTo: transaction.receiver,
@@ -64,8 +60,6 @@ export const TransactionProvider = ({ children }) => {
             amount: parseInt(transaction.amount._hex) / 10 ** 18,
           })
         );
-
-        console.log(structuredTransactions);
 
         setTransactions(structuredTransactions);
       } else {
@@ -110,7 +104,7 @@ export const TransactionProvider = ({ children }) => {
       if (!ethereum) return alert("Please install metamask");
       const transactionContract = getEthereumContract();
       const { addressTo, amount, keyword, message } = formData;
-      const parsedAmount = ethers.parseEther(amount);
+      const parsedAmount = ethers.utils.parseEther(amount);
 
       await ethereum.request({
         method: "eth_sendTransaction",
@@ -119,7 +113,7 @@ export const TransactionProvider = ({ children }) => {
             from: currentAccount,
             to: addressTo,
             gas: "0x5208", //21000 GWEI
-            value: parsedAmount.toString(16),
+            value: parsedAmount._hex,
           },
         ],
       });
@@ -166,7 +160,7 @@ export const TransactionProvider = ({ children }) => {
   useEffect(() => {
     checkIfWalletConnected();
     checkIfTransactionsExists();
-  }, []);
+  }, [transactionCount]);
   return (
     <TransactionContext.Provider
       value={{
@@ -176,6 +170,9 @@ export const TransactionProvider = ({ children }) => {
         setFormData,
         handleChange,
         sendTransaction,
+        isLoading,
+        transactions,
+        transactionCount,
       }}
     >
       {children}
